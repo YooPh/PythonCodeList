@@ -19,7 +19,7 @@ params = (
     ('rt', '1605665314498'),
 )
 
-init(autoreset=False)
+# init(autoreset=False)
 
 
 class Colored(object):
@@ -70,11 +70,13 @@ def find(code_list):
             except:
                 pass
 
-        if dataTemp1 != dataTemp:
-            dataTemp1 = dataTemp.copy()
-            os.system('cls')
-            print(t)
-        time.sleep(30)
+        # if dataTemp1 != dataTemp:
+        #     dataTemp1 = dataTemp.copy()
+        #     os.system('cls')
+        #     print(t)
+        os.system('cls')
+        print(t)
+        time.sleep(5)
 
 
 def main():
