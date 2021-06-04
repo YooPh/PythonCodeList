@@ -26,8 +26,10 @@ for movie in moviesdics:
     url = 'https://jx.618g.com/?url='+movie['url']
     responses = requests.get(url=url,headers=headers)
     tree = etree.HTML(responses.text)
-    m3u8url = tree.xpath('/html/body/div[1]/iframe/@src')[0]
-    a = '/m3u8-dp.php?url='
-    if a in m3u8url:
-        cmd = 'ffmpeg -i '+ m3u8url.replace(a,'') +' -vcodec copy -acodec copy '+movie['name']+'.mp4'
-        os.system(cmd)
+    temp = tree.xpath('/html/body/div[1]/iframe/@src')
+    if len(temp)>0:
+        m3u8url = tree.xpath('/html/body/div[1]/iframe/@src')[0]
+        a = '/m3u8-dp.php?url='
+        if a in m3u8url:
+            cmd = 'ffmpeg -i '+ m3u8url.replace(a,'') +' -vcodec copy -acodec copy '+movie['name']+'.mp4'
+            os.system(cmd)
