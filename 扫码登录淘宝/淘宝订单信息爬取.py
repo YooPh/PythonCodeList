@@ -14,6 +14,7 @@ from PIL import Image
 from prettytable import PrettyTable
 import configparser
 import psutil
+from pathlib import Path
 
 
 class TaoBao:
@@ -162,7 +163,7 @@ class TaoBao:
 
         if useDatabaseFlag == '1':
             print('信息写入数据库...\n')
-            db.delete('delete from dbo.淘宝订单表', conn)
+            db.delete('delete from dbo.taobao', conn)
             db.add(infos, conn)
             print('信息写入数据库完成\n')
                 
@@ -227,7 +228,7 @@ class DataBase:
         try:
             cu = conn.cursor()
             for info in infos:
-                sql = "insert into dbo.淘宝订单表 (订单号,物流号,链接) values ('%s','%s','%s')" % (info[0], info[1], info[2])
+                sql = "insert into dbo.taobao (order_num,tracking_num,url) values ('%s','%s','%s')" % (info[0], info[1], info[2])
                 cu.execute(sql)
                 conn.commit()
             cu.close()
@@ -257,7 +258,11 @@ conSta = True
 exit_flag = False
 if __name__ == "__main__":
     cf = configparser.ConfigParser()  # 读取配置文件
-    cf.read('./config.ini')
+    my_file = Path("./config.ini")
+    if my_file.is_file():
+        cf.read('./config.ini')
+    else:
+
     print('登录淘宝！')
     tools = Tools()
     tools.killPrc('chromedriver.exe')
