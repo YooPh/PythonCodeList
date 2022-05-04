@@ -1,4 +1,7 @@
 # -*- coding:utf-8 -*-#
+import os
+import random
+
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver import ActionChains
@@ -14,16 +17,18 @@ from PIL import Image
 from prettytable import PrettyTable
 import configparser
 import psutil
-from pathlib import Path
+import sys
 
 
 class TaoBao:
     def __init__(self):
         self.login_url = cf.get('Url', 'login_url')
         self.order_url = cf.get('Url', 'order_url')
-        self.userName = cf.get('Login', 'userName')
-        self.userPws = cf.get('Login', 'userPws')
+        self.userName = enc.decrypt(k, cf.get('Login', 'userName'))
+        self.userPws = enc.decrypt(k, cf.get('Login', 'userPws'))
         self.userqr = cf.get('Login', 'use_qr')
+        self.agency_ips = cf.get('agency', 'agency_ips')
+
 
         # 无头浏览器
         chrome_options = Options()
@@ -38,7 +43,14 @@ class TaoBao:
 
         chrome_options.add_argument('log-level=3')
 
+        # 代理
+        if len(self.agency_ips) > 0:
+            self.agency_ips = self.agency_ips.split(',')
+            proxy = '--proxy-server=http://' + random.choice(self.agency_ips)
+            chrome_options.add_argument(proxy)
+
         self.browser = webdriver.Chrome(options=chrome_options)
+
 
     def login(self):
         self.browser.get(url=self.login_url)
@@ -206,9 +218,9 @@ class DataBase:
     def connectToSqlServer():
         try:
             host = cf.get('Database', 'host')
-            user = cf.get('Database', 'user')
-            password = cf.get('Database', 'password')
-            db = cf.get('Database', 'db')
+            user = enc.decrypt(k, cf.get('Database', 'user'))
+            password = enc.decrypt(k, cf.get('Database', 'password'))
+            db = enc.decrypt(k, cf.get('Database', 'db'))
             conn = pymssql.connect(host, user, password, db)
             return True, conn
         except:
@@ -253,46 +265,146 @@ class Tools:
                 proc.kill()
 
 
+class Enc:
+
+    def encrypt(self, key, s):
+        b = bytearray(str(s).encode("gbk"))
+        n = len(b)  # 求出 b 的字节数
+        c = bytearray(n * 2)
+        j = 0
+        for i in range(0, n):
+            b1 = b[i]
+            b2 = b1 ^ key  # b1 = b2^ key
+            c1 = b2 % 16
+            c2 = b2 // 16  # b2 = c2*16 + c1
+            c1 = c1 + 65
+            c2 = c2 + 65  # c1,c2都是0~15之间的数,加上65就变成了A-P 的字符的编码
+            c[j] = c1
+            c[j + 1] = c2
+            j = j + 2
+        return c.decode("gbk")
+
+    def decrypt(self, key, s):
+        c = bytearray(str(s).encode("gbk"))
+        n = len(c)  # 计算 b 的字节数
+        if n % 2 != 0:
+            return ""
+        n = n // 2
+        b = bytearray(n)
+        j = 0
+        for i in range(0, n):
+            c1 = c[j]
+            c2 = c[j + 1]
+            j = j + 2
+            c1 = c1 - 65
+            c2 = c2 - 65
+            b2 = c2 * 16 + c1
+            b1 = b2 ^ key
+            b[i] = b1
+        try:
+            return b.decode("gbk")
+        except:
+            return "failed"
+
+
 db = DataBase
+enc = Enc()
+k = 10
 conSta = True
 exit_flag = False
 if __name__ == "__main__":
     cf = configparser.ConfigParser()  # 读取配置文件
-    my_file = Path("./config.ini")
-    if my_file.is_file():
-        cf.read('./config.ini')
-    else:
 
-    print('登录淘宝！')
-    tools = Tools()
-    tools.killPrc('chromedriver.exe')
-    tools.killPrc('chrome.exe')
-    tb = TaoBao()
-    try:
-        useDatabaseFlag = cf.get('Database', 'useDatabase')  # 配置文件是否使用数据库
-        if useDatabaseFlag == '1':
-            conSta, conn = db.connectToSqlServer()
-
-        if conSta:
-            tb.login()  # 扫码登录淘宝
-            while True:
-                temp = input("请输入代码< 1:执行  q:退出 >:")
-                if temp != 'q':
-                    if temp != "":
-                        if temp == '1':
-                            tb.getdata()
-                else:
-                    break
-            exit_flag = True
-            print('正在退出，请稍等...')
-            tb.browser.quit()
-            if useDatabaseFlag == '1':
-                conn.close()
-    finally:
-        if not exit_flag:
-            print('正在退出，请稍等...')
-            tb.browser.quit()
-            if useDatabaseFlag == '1' and conSta:
-                conn.close()
+    while True:
+        res = input('1:执行淘宝订单爬取\n2:配置参数\nq:退出\n<请输入相应功能码>:')
+        if res == "2":
+            path = './config.ini'
+            if os.path.exists(path):
+                os.remove(path)
+            cf = configparser.ConfigParser()
+            cf.read('./config.ini')
+            print('\n**************参数配置***************')
+            cf.add_section('Database')
+            res = input('请输入是否使用数据库功能<0 or 1>:')
+            cf.set('Database', 'useDatabase', res)
+            res = input('请输入数据库host：')
+            cf.set('Database', 'host', res)
+            res = input('请输入数据库登录名:')
+            cf.set('Database', 'user', enc.encrypt(k, res))
+            res = input('请输入数据库密码:')
+            cf.set('Database', 'password', enc.encrypt(k, res))
+            res = input('请输入数据库名:')
+            cf.set('Database', 'db', enc.encrypt(k, res))
+            cf.add_section('Url')
+            res = input('请输入登录淘宝Url:')
+            cf.set('Url', 'login_url', res)
+            res = input('请输入爬取淘宝订单Url:')
+            cf.set('Url', 'order_url', res)
+            cf.add_section('Chrome_option')
+            res = input('请输入是否使用无头模式<0 or 1>:')
+            cf.set('Chrome_option', 'headless', res)
+            cf.add_section('Login')
+            res = input('请输入是否使用扫码功能<0 or 1>:')
+            cf.set('Login', 'use_qr', res)
+            res = input('请输入淘宝账号:')
+            cf.set('Login', 'userName', enc.encrypt(k, res))
+            res = input('请输入淘宝密码:')
+            cf.set('Login', 'userPws', enc.encrypt(k, res))
+            res = input('请输入代理IP:')
+            cf.set('agency', 'agency_ips', res)
+            print('*************************************\n')
+            with open(path, 'w') as file:
+                cf.write(file)
+            print('配置完成\n')
+        elif res == "1":
+            print('登录淘宝！')
+            cf.read('./config.ini')
+            tools = Tools()
             tools.killPrc('chromedriver.exe')
             tools.killPrc('chrome.exe')
+            tb = TaoBao()
+            try:
+                useDatabaseFlag = cf.get('Database', 'useDatabase')  # 配置文件是否使用数据库
+                if useDatabaseFlag == '1':
+                    conSta, conn = db.connectToSqlServer()
+
+                if conSta:
+                    tb.login()  # 扫码登录淘宝
+                    while True:
+                        temp = input("请输入代码< 1:执行  b:返回  q:退出 >:")
+                        if temp != 'b':
+                            if temp != "":
+                                if temp == '1':
+                                    tb.getdata()
+                                if temp == 'q':
+                                    print('正在退出，请稍等...')
+                                    exit_flag = True
+
+                                    tb.browser.quit()
+                                    if useDatabaseFlag == '1':
+                                        conn.close()
+
+                                    sys.exit()
+
+                        else:
+                            print('正在返回，请稍等...')
+                            exit_flag = True
+
+                            tb.browser.quit()
+                            if useDatabaseFlag == '1':
+                                conn.close()
+
+                            break
+                else:
+                    print('数据库连接异常')              
+            finally:
+                if not exit_flag:
+                    print('正在退出，请稍等...')
+                    tb.browser.quit()
+                    if useDatabaseFlag == '1' and conSta:
+                        conn.close()
+                    tools.killPrc('chromedriver.exe')
+                    tools.killPrc('chrome.exe')
+        elif res == 'q':
+            sys.exit()
+            break
